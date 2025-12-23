@@ -3,7 +3,7 @@ const packageJson = require("./package.json");
 const request = require("request");
 const jp = require("jsonpath");
 
-module.exports = function(homebridge) {
+module.exports = function (homebridge) {
     Service = homebridge.hap.Service;
     Characteristic = homebridge.hap.Characteristic;
     homebridge.registerAccessory(
@@ -44,6 +44,7 @@ function GarageDoorOpener(log, config) {
 
     this.polling = config.polling || false;
     this.pollInterval = config.pollInterval || 120;
+    this.isMoving = false;
 
     this.statusURL = config.statusURL;
     this.statusKey = config.statusKey || "$.inputs[0].input";
@@ -64,27 +65,27 @@ function GarageDoorOpener(log, config) {
 }
 
 GarageDoorOpener.prototype = {
-    identify: function(callback) {
+    identify: function (callback) {
         this.log("Identify requested!");
         callback();
     },
 
-    _httpRequest: function(url, body, method, callback) {
+    _httpRequest: function (url, body, method, callback) {
         request({
-                url: url,
-                body: body,
-                method: this.http_method,
-                timeout: this.timeout,
-                rejectUnauthorized: false,
-                auth: this.auth,
-            },
-            function(error, response, body) {
+            url: url,
+            body: body,
+            method: this.http_method,
+            timeout: this.timeout,
+            rejectUnauthorized: false,
+            auth: this.auth,
+        },
+            function (error, response, body) {
                 callback(error, response, body);
             }
         );
     },
 
-    _getStatus: function(callback) {
+    _getStatus: function (callback) {
         var url = this.statusURL;
 
         if (this.config.debug) {
@@ -95,7 +96,7 @@ GarageDoorOpener.prototype = {
             url,
             "",
             "GET",
-            function(error, response, responseBody) {
+            function (error, response, responseBody) {
                 if (error) {
                     this.log.error("Error getting status: %s", error.message);
                     this.service
@@ -109,8 +110,8 @@ GarageDoorOpener.prototype = {
                         var originalStatusValue = jp
                             .query(
                                 typeof responseBody === "string" ?
-                                JSON.parse(responseBody) :
-                                responseBody,
+                                    JSON.parse(responseBody) :
+                                    responseBody,
                                 this.statusKey,
                                 1
                             )
@@ -160,7 +161,7 @@ GarageDoorOpener.prototype = {
         );
     },
 
-    setTargetDoorState: function(value, callback) {
+    setTargetDoorState: function (value, callback) {
         var url;
 
         this.log.debug("Setting targetDoorState to %s", value);
@@ -175,7 +176,7 @@ GarageDoorOpener.prototype = {
             url,
             "",
             this.http_method,
-            function(error, response, responseBody) {
+            function (error, response, responseBody) {
                 if (error) {
                     this.log.warn("Error setting targetDoorState: %s", error.message);
                     callback(error);
@@ -199,7 +200,8 @@ GarageDoorOpener.prototype = {
         );
     },
 
-    simulateOpen: function() {
+    simulateOpen: function () {
+        this.isMoving = true;
         this.service
             .getCharacteristic(Characteristic.CurrentDoorState)
             .updateValue(2);
@@ -207,11 +209,13 @@ GarageDoorOpener.prototype = {
             this.service
                 .getCharacteristic(Characteristic.CurrentDoorState)
                 .updateValue(0);
+            this.isMoving = false;
             this.log("Finished opening");
         }, this.openTime * 1000);
     },
 
-    simulateClose: function() {
+    simulateClose: function () {
+        this.isMoving = true;
         this.service
             .getCharacteristic(Characteristic.CurrentDoorState)
             .updateValue(3);
@@ -219,11 +223,12 @@ GarageDoorOpener.prototype = {
             this.service
                 .getCharacteristic(Characteristic.CurrentDoorState)
                 .updateValue(1);
+            this.isMoving = false;
             this.log("Finished closing");
         }, this.closeTime * 1000);
     },
 
-    autoLockFunction: function() {
+    autoLockFunction: function () {
         this.log("Waiting %s seconds for autolock", this.autoLockDelay);
         setTimeout(() => {
             this.service.setCharacteristic(Characteristic.TargetDoorState, 1);
@@ -231,7 +236,7 @@ GarageDoorOpener.prototype = {
         }, this.autoLockDelay * 1000);
     },
 
-    switchOffFunction: function() {
+    switchOffFunction: function () {
         this.log("Waiting %s seconds for switch off", this.switchOffDelay);
         setTimeout(() => {
             this.log("SwitchOff...");
@@ -239,12 +244,12 @@ GarageDoorOpener.prototype = {
                 this.closeURL,
                 "",
                 this.http_method,
-                function(error, response, responseBody) {}.bind(this)
+                function (error, response, responseBody) { }.bind(this)
             );
         }, this.switchOffDelay * 1000);
     },
 
-    getServices: function() {
+    getServices: function () {
         this.informationService = new Service.AccessoryInformation();
 
         this.informationService
@@ -258,11 +263,13 @@ GarageDoorOpener.prototype = {
             .on("set", this.setTargetDoorState.bind(this));
 
         if (this.polling) {
-            this._getStatus(function() {});
+            this._getStatus(function () { });
 
             setInterval(
-                function() {
-                    this._getStatus(function() {});
+                function () {
+                    if (!this.isMoving) {
+                        this._getStatus(function () { });
+                    }
                 }.bind(this),
                 this.pollInterval * 1000
             );
