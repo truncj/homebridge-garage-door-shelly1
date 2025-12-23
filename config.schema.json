@@ -10,26 +10,27 @@
                 "type": "string",
                 "required": true,
                 "description": "Name to appear in the Home app"
-
             },
             "http_method": {
                 "title": "HTTP Method",
                 "type": "string",
-                "oneOf": [{
-                    "title": "GET",
-                    "enum": [
-                        "GET"
-                    ]
-                }, {
-                    "title": "POST",
-                    "enum": [
-                        "POST"
-                    ]
-                }],
+                "oneOf": [
+                    {
+                        "title": "GET",
+                        "enum": [
+                            "GET"
+                        ]
+                    },
+                    {
+                        "title": "POST",
+                        "enum": [
+                            "POST"
+                        ]
+                    }
+                ],
                 "required": true,
                 "default": "GET",
                 "description": "The HTTP method to be used to communicate with the device API."
-
             },
             "openURL": {
                 "title": "Open URL",
@@ -53,7 +54,6 @@
                 "type": "string",
                 "description": "Password if HTTP authentication is enabled"
             },
-
             "openTime": {
                 "title": "Time to open the door",
                 "type": "integer",
@@ -91,6 +91,12 @@
                 "default": 120,
                 "description": "Time (in seconds) between device polls (if `polling` is enabled) "
             },
+            "movementPollInterval": {
+                "title": "Movement Polling interval",
+                "type": "integer",
+                "default": 2,
+                "description": "Time (in seconds) between device polls when moving (if `polling` is enabled) "
+            },
             "statusURL": {
                 "title": "Status polling URL",
                 "type": "string",
@@ -126,7 +132,6 @@
                 "default": "3",
                 "description": "Regex that will match the `closing` state of the relay status (e.g. `closing`)"
             },
-
             "manufacturer": {
                 "title": "Manufactor",
                 "type": "string",
@@ -143,7 +148,6 @@
                 "default": false,
                 "description": "Turn on debug mode, i.e. additional information will show up on the homebridge log."
             }
-
         }
     }
 }

@@ -10,6 +10,7 @@
     "closeTime": 17,
     "polling": true,
     "pollInterval": 60,
+    "movementPollInterval": 2,
     "username": "garage",
     "password": "********",
     "manufacturer": "BFT",
