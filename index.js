@@ -44,6 +44,7 @@ function GarageDoorOpener(log, config) {
 
     this.polling = config.polling || false;
     this.pollInterval = config.pollInterval || 120;
+    this.movementPollInterval = config.movementPollInterval || 2;
     this.isMoving = false;
 
     this.statusURL = config.statusURL;
@@ -85,7 +86,7 @@ GarageDoorOpener.prototype = {
         );
     },
 
-    _getStatus: function (callback) {
+    _fetchStatus: function (callback) {
         var url = this.statusURL;
 
         if (this.config.debug) {
@@ -98,10 +99,6 @@ GarageDoorOpener.prototype = {
             "GET",
             function (error, response, responseBody) {
                 if (error) {
-                    this.log.error("Error getting status: %s", error.message);
-                    this.service
-                        .getCharacteristic(Characteristic.CurrentDoorState)
-                        .updateValue(new Error("Polling failed"));
                     callback(error);
                 } else {
                     let statusValue = 0;
@@ -144,21 +141,35 @@ GarageDoorOpener.prototype = {
                     } else {
                         statusValue = responseBody;
                     }
-                    this.service
-                        .getCharacteristic(Characteristic.CurrentDoorState)
-                        .updateValue(statusValue);
-                    this.service
-                        .getCharacteristic(Characteristic.TargetDoorState)
-                        .updateValue(statusValue);
-
-                    if (this.config.debug) {
-                        this.log.debug("Updated door state to: %s", statusValue);
-                    }
-
-                    callback();
+                    callback(null, statusValue);
                 }
             }.bind(this)
         );
+    },
+
+    _getStatus: function (callback) {
+        this._fetchStatus(function (error, statusValue) {
+            if (error) {
+                this.log.error("Error getting status: %s", error.message);
+                this.service
+                    .getCharacteristic(Characteristic.CurrentDoorState)
+                    .updateValue(new Error("Polling failed"));
+                callback(error);
+            } else {
+                this.service
+                    .getCharacteristic(Characteristic.CurrentDoorState)
+                    .updateValue(statusValue);
+                this.service
+                    .getCharacteristic(Characteristic.TargetDoorState)
+                    .updateValue(statusValue);
+
+                if (this.config.debug) {
+                    this.log.debug("Updated door state to: %s", statusValue);
+                }
+
+                callback();
+            }
+        }.bind(this));
     },
 
     setTargetDoorState: function (value, callback) {
@@ -205,12 +216,29 @@ GarageDoorOpener.prototype = {
         this.service
             .getCharacteristic(Characteristic.CurrentDoorState)
             .updateValue(2);
-        setTimeout(() => {
-            this.service
-                .getCharacteristic(Characteristic.CurrentDoorState)
-                .updateValue(0);
-            this.isMoving = false;
-            this.log("Finished opening");
+
+        const pollingTimer = setInterval(() => {
+            this._fetchStatus((err, value) => {
+                if (!err && value === 0) { // Open
+                    this.log("Detected Open state early");
+                    clearInterval(pollingTimer);
+                    clearTimeout(timeoutTimer);
+                    this.service
+                        .getCharacteristic(Characteristic.CurrentDoorState)
+                        .updateValue(0);
+                    this.isMoving = false;
+                    this.log("Finished opening");
+                }
+            });
+        }, this.movementPollInterval * 1000);
+
+        const timeoutTimer = setTimeout(() => {
+            clearInterval(pollingTimer);
+            this.log("Opening time concluded, updating status");
+            this._getStatus(() => {
+                this.isMoving = false;
+                this.log("Finished opening (timeout)");
+            });
         }, this.openTime * 1000);
     },
 
@@ -219,12 +247,29 @@ GarageDoorOpener.prototype = {
         this.service
             .getCharacteristic(Characteristic.CurrentDoorState)
             .updateValue(3);
-        setTimeout(() => {
-            this.service
-                .getCharacteristic(Characteristic.CurrentDoorState)
-                .updateValue(1);
-            this.isMoving = false;
-            this.log("Finished closing");
+
+        const pollingTimer = setInterval(() => {
+            this._fetchStatus((err, value) => {
+                if (!err && value === 1) { // Closed
+                    this.log("Detected Closed state early");
+                    clearInterval(pollingTimer);
+                    clearTimeout(timeoutTimer);
+                    this.service
+                        .getCharacteristic(Characteristic.CurrentDoorState)
+                        .updateValue(1);
+                    this.isMoving = false;
+                    this.log("Finished closing");
+                }
+            });
+        }, this.movementPollInterval * 1000);
+
+        const timeoutTimer = setTimeout(() => {
+            clearInterval(pollingTimer);
+            this.log("Closing time concluded, updating status");
+            this._getStatus(() => {
+                this.isMoving = false;
+                this.log("Finished closing (timeout)");
+            });
         }, this.closeTime * 1000);
     },
 
